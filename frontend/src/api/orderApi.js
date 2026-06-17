@@ -21,6 +21,9 @@ export const orderApi = {
 
   getOrderLogs: (orderId) =>
     fetch(`${BASE}/orders/${orderId}/logs`).then(handleResponse),
+
+  getWorkflowExecution: (orderId) =>
+    fetch(`${BASE}/orders/${orderId}/workflow`).then(handleResponse),
 }
 
 export const chaosApi = {

@@ -1,9 +1,12 @@
 package mdl.order_system_test.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.workflow.StartWorkflowRequest;
 import lombok.extern.slf4j.Slf4j;
 import mdl.order_system_test.dto.CreateOrderRequest;
 import mdl.order_system_test.dto.OrderResponse;
+import mdl.order_system_test.dto.WorkflowExecutionResponse;
 import mdl.order_system_test.model.AuditLog;
 import mdl.order_system_test.model.Order;
 import mdl.order_system_test.model.OrderStatus;
@@ -17,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,20 +29,25 @@ import java.util.stream.Collectors;
 @Service
 public class OrderService {
 
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+
     private final OrderRepository orderRepository;
     private final AuditLogRepository auditLogRepository;
     private final RestTemplate restTemplate;
     private final String conductorUrl;
+    private final ObjectMapper objectMapper;
 
     public OrderService(
             OrderRepository orderRepository,
             AuditLogRepository auditLogRepository,
             @Qualifier("conductorRestTemplate") RestTemplate restTemplate,
-            @Value("${conductor.server.url}") String conductorUrl) {
+            @Value("${conductor.server.url}") String conductorUrl,
+            ObjectMapper objectMapper) {
         this.orderRepository = orderRepository;
         this.auditLogRepository = auditLogRepository;
         this.restTemplate = restTemplate;
         this.conductorUrl = conductorUrl;
+        this.objectMapper = objectMapper;
     }
 
     public OrderResponse createOrder(CreateOrderRequest request) {
@@ -102,6 +111,101 @@ public class OrderService {
 
     public List<AuditLog> getAuditLogs(String orderId) {
         return auditLogRepository.findByOrderIdOrderByTimestampAsc(orderId);
+    }
+
+    /**
+     * Live execution snapshot for the BPMN-style flow viewer: flattens the top-level
+     * workflow's tasks together with any SUB_WORKFLOW's tasks (e.g. shipment_sub_workflow)
+     * into a single map keyed by taskReferenceName, mirroring what Conductor's own UI shows.
+     */
+    public WorkflowExecutionResponse getWorkflowExecution(String orderId) {
+        Order order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
+
+        if (order.getWorkflowId() == null) {
+            return WorkflowExecutionResponse.builder()
+                    .workflowId(null)
+                    .status("NOT_STARTED")
+                    .tasks(Map.of())
+                    .build();
+        }
+
+        Map<String, WorkflowExecutionResponse.TaskStatusInfo> tasks = new LinkedHashMap<>();
+        String topLevelStatus;
+        try {
+            Map<String, Object> workflowJson = fetchWorkflow(order.getWorkflowId());
+            topLevelStatus = (String) workflowJson.get("status");
+            collectTasks(workflowJson, tasks);
+        } catch (Exception e) {
+            log.warn("Failed to fetch workflow execution for order {}: {}", orderId, e.getMessage());
+            topLevelStatus = "UNKNOWN";
+        }
+
+        return WorkflowExecutionResponse.builder()
+                .workflowId(order.getWorkflowId())
+                .status(topLevelStatus)
+                .tasks(tasks)
+                .build();
+    }
+
+    private Map<String, Object> fetchWorkflow(String workflowId) throws Exception {
+        String body = restTemplate.getForObject(
+                conductorUrl + "/workflow/" + workflowId + "?includeTasks=true", String.class);
+        return objectMapper.readValue(body, MAP_TYPE);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void collectTasks(Map<String, Object> workflowJson, Map<String, WorkflowExecutionResponse.TaskStatusInfo> out) {
+        Object tasksRaw = workflowJson.get("tasks");
+        if (!(tasksRaw instanceof List)) {
+            return;
+        }
+
+        for (Object taskObj : (List<Object>) tasksRaw) {
+            if (!(taskObj instanceof Map)) continue;
+            Map<String, Object> task = (Map<String, Object>) taskObj;
+
+            String refName = (String) task.get("referenceTaskName");
+            if (refName == null) continue;
+
+            String taskType = (String) task.get("taskType");
+            out.put(refName, WorkflowExecutionResponse.TaskStatusInfo.builder()
+                    .status((String) task.get("status"))
+                    .taskType(taskType)
+                    .startTime(toLong(task.get("startTime")))
+                    .endTime(toLong(task.get("endTime")))
+                    .reasonForIncompletion((String) task.get("reasonForIncompletion"))
+                    .build());
+
+            if ("SUB_WORKFLOW".equals(taskType)) {
+                String subWorkflowId = resolveSubWorkflowId(task);
+                if (subWorkflowId != null) {
+                    try {
+                        collectTasks(fetchWorkflow(subWorkflowId), out);
+                    } catch (Exception e) {
+                        log.warn("Failed to fetch sub-workflow {} tasks: {}", subWorkflowId, e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolveSubWorkflowId(Map<String, Object> task) {
+        Object subWorkflowId = task.get("subWorkflowId");
+        if (subWorkflowId instanceof String) {
+            return (String) subWorkflowId;
+        }
+        Object outputData = task.get("outputData");
+        if (outputData instanceof Map) {
+            Object id = ((Map<String, Object>) outputData).get("subWorkflowId");
+            if (id instanceof String) return (String) id;
+        }
+        return null;
+    }
+
+    private Long toLong(Object value) {
+        return value instanceof Number ? ((Number) value).longValue() : null;
     }
 
     private Map<String, Object> buildWorkflowInput(Order order) {

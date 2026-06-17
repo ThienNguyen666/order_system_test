@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import mdl.order_system_test.dto.CreateOrderRequest;
 import mdl.order_system_test.dto.OrderResponse;
+import mdl.order_system_test.dto.WorkflowExecutionResponse;
 import mdl.order_system_test.model.AuditLog;
 import mdl.order_system_test.service.OrderService;
 import org.springframework.http.HttpStatus;
@@ -37,5 +38,10 @@ public class OrderController {
     @GetMapping("/{orderId}/logs")
     public ResponseEntity<List<AuditLog>> getOrderLogs(@PathVariable String orderId) {
         return ResponseEntity.ok(orderService.getAuditLogs(orderId));
+    }
+
+    @GetMapping("/{orderId}/workflow")
+    public ResponseEntity<WorkflowExecutionResponse> getWorkflowExecution(@PathVariable String orderId) {
+        return ResponseEntity.ok(orderService.getWorkflowExecution(orderId));
     }
 }

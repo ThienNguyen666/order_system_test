@@ -59,7 +59,7 @@ export default function OrderForm({ onOrderCreated }) {
         items: form.items.map(it => ({ ...it, quantity: parseInt(it.quantity), unitPrice: parseFloat(it.unitPrice) })),
       }
       await orderApi.createOrder(payload)
-      onOrderCreated()
+      onOrderCreated(payload.orderId)
       setForm({ orderId: '', customerId: '', amount: '', items: [{ ...defaultItem }] })
     } catch (err) {
       setError(err.message)

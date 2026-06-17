@@ -1,28 +1,41 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import StatusBadge from './StatusBadge'
+import WorkflowDiagram from './WorkflowDiagram'
 import { orderApi } from '../api/orderApi'
 
-export default function OrderGrid({ orders, loading }) {
+export default function OrderGrid({ orders, loading, expandOrderId }) {
   const [expandedId, setExpandedId] = useState(null)
   const [logs, setLogs] = useState({})
   const [loadingLogs, setLoadingLogs] = useState(false)
 
-  const toggleLogs = async (orderId) => {
+  const loadLogsIfNeeded = async (orderId) => {
+    if (logs[orderId]) return
+    setLoadingLogs(true)
+    try {
+      const data = await orderApi.getOrderLogs(orderId)
+      setLogs(prev => ({ ...prev, [orderId]: data }))
+    } finally {
+      setLoadingLogs(false)
+    }
+  }
+
+  const toggleLogs = (orderId) => {
     if (expandedId === orderId) {
       setExpandedId(null)
       return
     }
     setExpandedId(orderId)
-    if (!logs[orderId]) {
-      setLoadingLogs(true)
-      try {
-        const data = await orderApi.getOrderLogs(orderId)
-        setLogs(prev => ({ ...prev, [orderId]: data }))
-      } finally {
-        setLoadingLogs(false)
-      }
-    }
+    loadLogsIfNeeded(orderId)
   }
+
+  // Auto-expand right when a new order is submitted, so its workflow diagram
+  // and logs are visible without the user having to click "View".
+  useEffect(() => {
+    if (!expandOrderId) return
+    setExpandedId(expandOrderId)
+    loadLogsIfNeeded(expandOrderId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandOrderId])
 
   if (loading) return <p style={{ color: '#64748b', textAlign: 'center', padding: 32 }}>Loading orders…</p>
   if (!orders.length) return <p style={{ color: '#64748b', textAlign: 'center', padding: 32 }}>No orders yet. Submit one above.</p>
@@ -61,7 +74,11 @@ export default function OrderGrid({ orders, loading }) {
               </tr>
               {expandedId === order.orderId && (
                 <tr key={`${order.orderId}-logs`}>
-                  <td colSpan={8} style={{ background: '#0f172a', padding: '0 12px 12px 12px' }}>
+                  <td colSpan={8} style={{ background: '#0f172a', padding: '12px 12px' }}>
+                    <WorkflowDiagram orderId={order.orderId} />
+                    <span style={{ color: '#94a3b8', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 6 }}>
+                      Audit Log
+                    </span>
                     {loadingLogs && !logs[order.orderId]
                       ? <p style={{ color: '#64748b', padding: '8px 0' }}>Loading…</p>
                       : (logs[order.orderId] ?? []).map((log, i) => (

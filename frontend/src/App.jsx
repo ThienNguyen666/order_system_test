@@ -7,6 +7,7 @@ import { orderApi } from './api/orderApi'
 export default function App() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  const [expandOrderId, setExpandOrderId] = useState(null)
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -16,6 +17,11 @@ export default function App() {
       setLoading(false)
     }
   }, [])
+
+  const handleOrderCreated = useCallback((orderId) => {
+    fetchOrders()
+    setExpandOrderId(orderId)
+  }, [fetchOrders])
 
   // Initial load + auto-refresh every 5 seconds to pick up workflow status updates
   useEffect(() => {
@@ -45,7 +51,7 @@ export default function App() {
       {/* ── New Order Form ── */}
       <section style={{ background: '#1e293b', borderRadius: 12, padding: 24, marginBottom: 28 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 18 }}>New Order</h2>
-        <OrderForm onOrderCreated={fetchOrders} />
+        <OrderForm onOrderCreated={handleOrderCreated} />
       </section>
 
       {/* ── Orders Dashboard ── */}
@@ -57,7 +63,7 @@ export default function App() {
             Refresh
           </button>
         </div>
-        <OrderGrid orders={orders} loading={loading} />
+        <OrderGrid orders={orders} loading={loading} expandOrderId={expandOrderId} />
       </section>
 
       <p style={{ color: '#334155', fontSize: 11, textAlign: 'center', marginTop: 24 }}>
