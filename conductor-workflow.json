@@ -1,0 +1,223 @@
+[
+  {
+    "name": "order_fulfillment_saga",
+    "description": "Order Fulfillment Saga — orchestrates inventory, payment, fraud check, and shipment with full compensation (Saga pattern).",
+    "version": 1,
+    "schemaVersion": 2,
+    "restartable": true,
+    "ownerEmail": "dev@example.com",
+    "timeoutPolicy": "TIME_OUT_WF",
+    "timeoutSeconds": 300,
+    "outputParameters": {
+      "orderId": "${workflow.input.orderId}"
+    },
+    "tasks": [
+      {
+        "name": "validate_order",
+        "taskReferenceName": "validate_order_ref",
+        "type": "INLINE",
+        "inputParameters": {
+          "evaluatorType": "javascript",
+          "expression": "function validate() { if (!$.orderId || !$.customerId || !$.amount || !$.items || $.items.length === 0) { return { valid: false, reason: 'Missing required fields' }; } if ($.amount <= 0) { return { valid: false, reason: 'Amount must be positive' }; } return { valid: true, reason: '' }; } validate();",
+          "orderId":    "${workflow.input.orderId}",
+          "customerId": "${workflow.input.customerId}",
+          "amount":     "${workflow.input.amount}",
+          "items":      "${workflow.input.items}"
+        }
+      },
+      {
+        "name": "parallel_fulfillment",
+        "taskReferenceName": "parallel_fulfillment_ref",
+        "type": "FORK_JOIN",
+        "inputParameters": {},
+        "forkTasks": [
+          [
+            {
+              "name": "reserve_inventory",
+              "taskReferenceName": "reserve_inventory_ref",
+              "type": "SIMPLE",
+              "retryCount": 3,
+              "retryLogic": "EXPONENTIAL_BACKOFF",
+              "retryDelaySeconds": 2,
+              "timeoutSeconds": 30,
+              "timeoutPolicy": "RETRY",
+              "inputParameters": {
+                "orderId": "${workflow.input.orderId}",
+                "items":   "${workflow.input.items}"
+              }
+            }
+          ],
+          [
+            {
+              "name": "authorize_payment",
+              "taskReferenceName": "authorize_payment_ref",
+              "type": "SIMPLE",
+              "retryCount": 2,
+              "retryLogic": "EXPONENTIAL_BACKOFF",
+              "retryDelaySeconds": 3,
+              "timeoutSeconds": 45,
+              "timeoutPolicy": "RETRY",
+              "inputParameters": {
+                "orderId":    "${workflow.input.orderId}",
+                "customerId": "${workflow.input.customerId}",
+                "amount":     "${workflow.input.amount}"
+              }
+            }
+          ],
+          [
+            {
+              "name": "fraud_check",
+              "taskReferenceName": "fraud_check_ref",
+              "type": "SIMPLE",
+              "retryCount": 1,
+              "retryLogic": "FIXED",
+              "retryDelaySeconds": 5,
+              "timeoutSeconds": 20,
+              "timeoutPolicy": "RETRY",
+              "inputParameters": {
+                "orderId":    "${workflow.input.orderId}",
+                "customerId": "${workflow.input.customerId}",
+                "amount":     "${workflow.input.amount}"
+              }
+            }
+          ]
+        ]
+      },
+      {
+        "name": "join_parallel",
+        "taskReferenceName": "join_parallel_ref",
+        "type": "JOIN",
+        "joinOn": [
+          "reserve_inventory_ref",
+          "authorize_payment_ref",
+          "fraud_check_ref"
+        ]
+      },
+      {
+        "name": "saga_decision",
+        "taskReferenceName": "saga_decision_ref",
+        "type": "SWITCH",
+        "evaluatorType": "javascript",
+        "expression": "$.paymentStatus === true || $.paymentStatus === 'true' ? 'success' : 'compensation'",
+        "inputParameters": {
+          "paymentStatus": "${authorize_payment_ref.output.paymentAuthorized}"
+        },
+        "decisionCases": {
+          "success": [
+            {
+              "name": "shipment_sub_workflow",
+              "taskReferenceName": "shipment_ref",
+              "type": "SUB_WORKFLOW",
+              "inputParameters": {
+                "orderId":    "${workflow.input.orderId}",
+                "customerId": "${workflow.input.customerId}",
+                "items":      "${workflow.input.items}"
+              },
+              "subWorkflowParam": {
+                "name": "shipment_sub_workflow",
+                "version": 1
+              }
+            },
+            {
+              "name": "update_order_status",
+              "taskReferenceName": "update_status_success_ref",
+              "type": "SIMPLE",
+              "retryCount": 3,
+              "retryLogic": "FIXED",
+              "retryDelaySeconds": 1,
+              "inputParameters": {
+                "orderId":        "${workflow.input.orderId}",
+                "status":         "COMPLETED",
+                "trackingNumber": "${shipment_ref.output.trackingNumber}"
+              }
+            }
+          ],
+          "compensation": [
+            {
+              "name": "release_inventory",
+              "taskReferenceName": "release_inventory_comp_ref",
+              "type": "SIMPLE",
+              "retryCount": 3,
+              "retryLogic": "EXPONENTIAL_BACKOFF",
+              "retryDelaySeconds": 2,
+              "timeoutSeconds": 30,
+              "timeoutPolicy": "RETRY",
+              "inputParameters": {
+                "orderId": "${workflow.input.orderId}",
+                "items":   "${workflow.input.items}"
+              }
+            },
+            {
+              "name": "void_payment_authorization",
+              "taskReferenceName": "void_payment_comp_ref",
+              "type": "SIMPLE",
+              "retryCount": 3,
+              "retryLogic": "EXPONENTIAL_BACKOFF",
+              "retryDelaySeconds": 2,
+              "timeoutSeconds": 30,
+              "timeoutPolicy": "RETRY",
+              "inputParameters": {
+                "orderId": "${workflow.input.orderId}"
+              }
+            },
+            {
+              "name": "update_order_status",
+              "taskReferenceName": "update_status_comp_ref",
+              "type": "SIMPLE",
+              "retryCount": 3,
+              "retryLogic": "FIXED",
+              "retryDelaySeconds": 1,
+              "inputParameters": {
+                "orderId": "${workflow.input.orderId}",
+                "status":  "COMPENSATED",
+                "reason":  "${authorize_payment_ref.output.reason}"
+              }
+            }
+          ]
+        },
+        "defaultCase": [
+          {
+            "name": "update_order_status",
+            "taskReferenceName": "update_status_default_ref",
+            "type": "SIMPLE",
+            "inputParameters": {
+              "orderId": "${workflow.input.orderId}",
+              "status":  "FAILED",
+              "reason":  "Unexpected saga decision outcome"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "shipment_sub_workflow",
+    "description": "Shipment sub-workflow — creates a shipment record and returns a tracking number.",
+    "version": 1,
+    "schemaVersion": 2,
+    "restartable": true,
+    "ownerEmail": "dev@example.com",
+    "timeoutPolicy": "TIME_OUT_WF",
+    "timeoutSeconds": 120,
+    "outputParameters": {
+      "trackingNumber": "${create_shipment_ref.output.trackingNumber}"
+    },
+    "tasks": [
+      {
+        "name": "create_shipment",
+        "taskReferenceName": "create_shipment_ref",
+        "type": "SIMPLE",
+        "retryCount": 2,
+        "retryLogic": "FIXED",
+        "retryDelaySeconds": 5,
+        "timeoutSeconds": 60,
+        "timeoutPolicy": "RETRY",
+        "inputParameters": {
+          "orderId":    "${workflow.input.orderId}",
+          "customerId": "${workflow.input.customerId}",
+          "items":      "${workflow.input.items}"
+        }
+      }
+    ]
+  }
+]
