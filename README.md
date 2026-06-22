@@ -55,8 +55,9 @@ docker compose up --build
 # Wait ~90 s for Conductor to finish booting, then:
 
 # 2. Register the workflow definition in Conductor
-#    Open http://localhost:8085 → Definitions → Workflows → New Workflow
-#    Paste the contents of conductor-workflow.json and save.
+#    a. Open http://localhost:8085 and click on "Swagger Documentation".
+#    b. Locate "metadata-resource" and expand the "PUT /api/metadata/workflow" endpoint.
+#    c. Click "Try it out", paste the entire contents of conductor-workflow.json, and click "Execute".
 
 # 3. Open the app
 open http://localhost:3000
@@ -152,3 +153,10 @@ CONDUCTOR_CLIENT_SECRET=...
 ```
 
 But for local Docker usage, none of that is needed.
+
+## Docker Optimizations
+To improve build performance and image boundaries, the following optimizations have been implemented:
+
+Leverage Docker Cache: Updated Frontend Dockerfile to use COPY package*.json ./ to properly cache layers and prevent unnecessary npm install on source code changes.
+
+Exclude Environment Waste: Added .dockerignore files to keep node_modules, build artifacts, and local configurations out of the Docker daemon context.
