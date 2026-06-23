@@ -29,7 +29,7 @@ public class CreateShipmentWorker implements Worker {
         String orderId    = (String) task.getInputData().get("orderId");
         String customerId = (String) task.getInputData().get("customerId");
 
-        log.info("[create_shipment] orderId={} customer={}", orderId, customerId);
+        log.info("[{}] orderId={} customer={}", task.getTaskDefName(), orderId, customerId);
 
         String trackingNumber = "TRK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 

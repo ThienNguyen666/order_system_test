@@ -47,7 +47,7 @@ public class AuthorizePaymentWorker implements Worker {
 
         if (simulatePaymentTimeout && attempt == 1) {
             long responseTimeoutSeconds = task.getResponseTimeoutSeconds() > 0 ? task.getResponseTimeoutSeconds() : 6;
-            throw new SimulatedTaskTimeoutException(
+            throw new RuntimeException(
                     "No task update will be sent; Conductor should requeue after responseTimeoutSeconds="
                             + responseTimeoutSeconds);
         }

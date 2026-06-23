@@ -38,3 +38,5 @@ out/
 
 ### Secrets — never commit real credentials ###
 .env
+
+*.log

@@ -30,7 +30,7 @@ public class ReserveInventoryWorker implements Worker {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> rawItems = (List<Map<String, Object>>) task.getInputData().get("items");
 
-        log.info("[reserve_inventory] orderId={} items={}", orderId, rawItems != null ? rawItems.size() : 0);
+        log.info("[{}] orderId={} items={}", task.getTaskDefName(), orderId, rawItems != null ? rawItems.size() : 0);
 
         List<OrderItem> items = WorkerUtils.toOrderItems(rawItems);
         String reservationId = inventoryService.reserve(orderId, items);

@@ -30,7 +30,7 @@ public class ReleaseInventoryWorker implements Worker {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> rawItems = (List<Map<String, Object>>) task.getInputData().get("items");
 
-        log.info("[release_inventory] COMPENSATION orderId={}", orderId);
+        log.info("[{}] COMPENSATION orderId={}", task.getTaskDefName(), orderId);
 
         List<OrderItem> items = WorkerUtils.toOrderItems(rawItems);
         inventoryService.release(orderId, items);

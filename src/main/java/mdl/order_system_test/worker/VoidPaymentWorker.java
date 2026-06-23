@@ -24,7 +24,7 @@ public class VoidPaymentWorker implements Worker {
     public TaskResult execute(Task task) {
         String orderId = (String) task.getInputData().get("orderId");
 
-        log.info("[void_payment_authorization] COMPENSATION orderId={}", orderId);
+        log.info("[{}] COMPENSATION orderId={}", task.getTaskDefName(), orderId);
 
         paymentService.voidAuthorization(orderId);
 

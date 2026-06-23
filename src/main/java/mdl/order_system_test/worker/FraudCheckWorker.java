@@ -30,7 +30,7 @@ public class FraudCheckWorker implements Worker {
         String customerId = (String) task.getInputData().get("customerId");
         BigDecimal amount = new BigDecimal(task.getInputData().get("amount").toString());
 
-        log.info("[fraud_check] orderId={} customer={} amount={}", orderId, customerId, amount);
+        log.info("[{}] orderId={} customer={} amount={}", task.getTaskDefName(), orderId, customerId, amount);
 
         // Naive rule: orders over $10,000 are flagged high-risk for demo purposes
         boolean highRisk = amount.compareTo(BigDecimal.valueOf(10_000)) > 0;

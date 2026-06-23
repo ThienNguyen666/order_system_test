@@ -29,7 +29,7 @@ public class UpdateOrderStatusWorker implements Worker {
         String trackingNumber = (String) task.getInputData().getOrDefault("trackingNumber", null);
 
         OrderStatus status = OrderStatus.valueOf(statusStr);
-        log.info("[update_order_status] orderId={} status={}", orderId, status);
+        log.info("[{}] orderId={} status={}", task.getTaskDefName(), orderId, status);
 
         orderService.updateStatus(orderId, status, reason, trackingNumber);
 

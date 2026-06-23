@@ -6,7 +6,7 @@ import com.netflix.conductor.client.worker.Worker;
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.common.metadata.tasks.TaskResult;
 import lombok.extern.slf4j.Slf4j;
-import mdl.order_system_test.worker.SimulatedTaskTimeoutException;
+// import mdl.order_system_test.worker.SimulatedTaskTimeoutException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -71,7 +71,7 @@ public class WorkerPollingService {
                 TaskResult result;
                 try {
                     result = worker.execute(task);
-                } catch (SimulatedTaskTimeoutException e) {
+                } catch (RuntimeException e) {
                     log.warn("[{}] leaving task={} unacknowledged for response-timeout demo: {}",
                             worker.getTaskDefName(), taskId, e.getMessage());
                     continue;
