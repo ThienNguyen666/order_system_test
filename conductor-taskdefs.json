@@ -1,5 +1,38 @@
 [
   {
+    "name": "intake_approval",
+    "description": "Human intake approval before automated fulfillment starts.",
+    "ownerEmail": "dev@example.com",
+    "retryCount": 0,
+    "retryLogic": "FIXED",
+    "retryDelaySeconds": 0,
+    "timeoutSeconds": 300,
+    "responseTimeoutSeconds": 300,
+    "timeoutPolicy": "TIME_OUT_WF"
+  },
+  {
+    "name": "risk_approval",
+    "description": "Human risk review before automated fulfillment starts.",
+    "ownerEmail": "dev@example.com",
+    "retryCount": 0,
+    "retryLogic": "FIXED",
+    "retryDelaySeconds": 0,
+    "timeoutSeconds": 300,
+    "responseTimeoutSeconds": 300,
+    "timeoutPolicy": "TIME_OUT_WF"
+  },
+  {
+    "name": "compliance_approval",
+    "description": "Human compliance approval before automated fulfillment starts.",
+    "ownerEmail": "dev@example.com",
+    "retryCount": 0,
+    "retryLogic": "FIXED",
+    "retryDelaySeconds": 0,
+    "timeoutSeconds": 300,
+    "responseTimeoutSeconds": 300,
+    "timeoutPolicy": "TIME_OUT_WF"
+  },
+  {
     "name": "reserve_inventory",
     "description": "Reserve stock for an order.",
     "ownerEmail": "dev@example.com",

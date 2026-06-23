@@ -60,4 +60,15 @@ public class OrderController {
         String reason = body.get("reason") instanceof String ? (String) body.get("reason") : "";
         return ResponseEntity.ok(orderService.completeManualApproval(orderId, approved, reviewer, reason));
     }
+
+    @PostMapping("/{orderId}/human-tasks/{taskReferenceName}/complete")
+    public ResponseEntity<OrderResponse> completeHumanTask(
+            @PathVariable String orderId,
+            @PathVariable String taskReferenceName,
+            @RequestBody Map<String, Object> body) {
+        boolean approved = Boolean.TRUE.equals(body.get("approved"));
+        String reviewer = body.get("reviewer") instanceof String ? (String) body.get("reviewer") : "demo-reviewer";
+        String reason = body.get("reason") instanceof String ? (String) body.get("reason") : "";
+        return ResponseEntity.ok(orderService.completeHumanTask(orderId, taskReferenceName, approved, reviewer, reason));
+    }
 }

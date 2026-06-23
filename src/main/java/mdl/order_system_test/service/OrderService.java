@@ -36,18 +36,21 @@ public class OrderService {
     private final RestTemplate restTemplate;
     private final String conductorUrl;
     private final ObjectMapper objectMapper;
+    private final HumanTaskQueueService humanTaskQueueService;
 
     public OrderService(
             OrderRepository orderRepository,
             AuditLogRepository auditLogRepository,
             @Qualifier("conductorRestTemplate") RestTemplate restTemplate,
             @Value("${conductor.server.url}") String conductorUrl,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            HumanTaskQueueService humanTaskQueueService) {
         this.orderRepository = orderRepository;
         this.auditLogRepository = auditLogRepository;
         this.restTemplate = restTemplate;
         this.conductorUrl = conductorUrl;
         this.objectMapper = objectMapper;
+        this.humanTaskQueueService = humanTaskQueueService;
     }
 
     public OrderResponse createOrder(CreateOrderRequest request) {
@@ -126,11 +129,16 @@ public class OrderService {
     }
 
     public OrderResponse completeManualApproval(String orderId, boolean approved, String reviewer, String reason) {
+        return completeHumanTask(orderId, "manual_approval_ref", approved, reviewer, reason);
+    }
+
+    public OrderResponse completeHumanTask(String orderId, String taskReferenceName, boolean approved, String reviewer, String reason) {
+        if (!humanTaskQueueService.isAllowedHumanTask(taskReferenceName)) {
+            throw new RuntimeException("Unsupported human task: " + taskReferenceName);
+        }
+
         Order order = orderRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
-        if (!Boolean.TRUE.equals(order.getRequireApproval())) {
-            throw new RuntimeException("Order does not require manual approval: " + orderId);
-        }
         if (order.getWorkflowId() == null || order.getWorkflowId().isBlank()) {
             throw new RuntimeException("Order workflow has not started yet: " + orderId);
         }
@@ -143,14 +151,17 @@ public class OrderService {
 
         restTemplate.postForEntity(
                 conductorUrl + "/tasks/" + order.getWorkflowId()
-                        + "/manual_approval_ref/COMPLETED?workerid=human-demo",
+                        + "/" + taskReferenceName + "/COMPLETED?workerid=human-demo",
                 output,
                 String.class);
+        humanTaskQueueService.markCompleted(orderId, taskReferenceName);
 
         auditLogRepository.save(AuditLog.builder()
                 .orderId(order.getOrderId())
-                .action(approved ? "MANUAL_APPROVAL_APPROVED" : "MANUAL_APPROVAL_REJECTED")
-                .details("reviewer=" + output.get("reviewer") + " reason=" + output.get("reason"))
+                .action(approved ? "HUMAN_TASK_APPROVED" : "HUMAN_TASK_REJECTED")
+                .details("task=" + taskReferenceName
+                        + " reviewer=" + output.get("reviewer")
+                        + " reason=" + output.get("reason"))
                 .timestamp(LocalDateTime.now())
                 .build());
 
@@ -171,6 +182,7 @@ public class OrderService {
                     .workflowId(null)
                     .status("NOT_STARTED")
                     .tasks(Map.of())
+                    .pendingHumanTasks(List.of())
                     .build();
         }
 
@@ -189,6 +201,7 @@ public class OrderService {
                 .workflowId(order.getWorkflowId())
                 .status(topLevelStatus)
                 .tasks(tasks)
+                .pendingHumanTasks(humanTaskQueueService.syncPendingTasks(orderId, tasks))
                 .build();
     }
 

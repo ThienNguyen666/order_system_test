@@ -22,7 +22,24 @@ services:
       retries: 5
       start_period: 20s
 
-  # ── 2. Conductor (local, no auth required) ──────────────────────────────────
+  # ── 2. Redis (human task queue cache) ────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: order-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - order-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── 3. Conductor (local, no auth required) ──────────────────────────────────
   conductor:
     image: orkesio/orkes-conductor-community:latest
     container_name: order-conductor
@@ -38,7 +55,7 @@ services:
       retries: 15
       start_period: 90s
 
-  # ── 3. Spring Boot Backend ───────────────────────────────────────────────────
+  # ── 4. Spring Boot Backend ───────────────────────────────────────────────────
   backend:
     build:
       context: .
@@ -49,16 +66,18 @@ services:
       - "8080:8080"
     environment:
       SPRING_DATA_MONGODB_URI: mongodb://admin:secret@mongodb:27017/order_db?authSource=admin
-      CONDUCTOR_SERVER_URL: http://conductor:8080/api
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      CONDUCTOR_SERVER_URL: http://host.docker.internal:8081/api
     depends_on:
       mongodb:
         condition: service_healthy
-      conductor:
+      redis:
         condition: service_healthy
     networks:
       - order-net
 
-  # ── 4. React Frontend ────────────────────────────────────────────────────────
+  # ── 5. React Frontend ────────────────────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -74,6 +93,8 @@ services:
 
 volumes:
   mongo_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:
