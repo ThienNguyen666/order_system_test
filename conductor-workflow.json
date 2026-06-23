@@ -26,6 +26,78 @@
         }
       },
       {
+        "name": "intake_approval",
+        "taskReferenceName": "intake_approval_ref",
+        "type": "HUMAN",
+        "inputParameters": {
+          "orderId":    "${workflow.input.orderId}",
+          "customerId": "${workflow.input.customerId}",
+          "amount":     "${workflow.input.amount}",
+          "prompt":     "Intake review before automated fulfillment"
+        }
+      },
+      {
+        "name": "risk_approval",
+        "taskReferenceName": "risk_approval_ref",
+        "type": "HUMAN",
+        "inputParameters": {
+          "orderId":    "${workflow.input.orderId}",
+          "customerId": "${workflow.input.customerId}",
+          "amount":     "${workflow.input.amount}",
+          "prompt":     "Risk review before automated fulfillment"
+        }
+      },
+      {
+        "name": "compliance_approval",
+        "taskReferenceName": "compliance_approval_ref",
+        "type": "HUMAN",
+        "inputParameters": {
+          "orderId":    "${workflow.input.orderId}",
+          "customerId": "${workflow.input.customerId}",
+          "amount":     "${workflow.input.amount}",
+          "prompt":     "Compliance review before automated fulfillment"
+        }
+      },
+      {
+        "name": "startup_approval_decision",
+        "taskReferenceName": "startup_approval_decision_ref",
+        "type": "SWITCH",
+        "evaluatorType": "javascript",
+        "expression": "($.intakeApproved === true || $.intakeApproved === 'true') && ($.riskApproved === true || $.riskApproved === 'true') && ($.complianceApproved === true || $.complianceApproved === 'true') ? 'approved' : 'rejected'",
+        "inputParameters": {
+          "intakeApproved":     "${intake_approval_ref.output.approved}",
+          "riskApproved":       "${risk_approval_ref.output.approved}",
+          "complianceApproved": "${compliance_approval_ref.output.approved}"
+        },
+        "decisionCases": {
+          "rejected": [
+            {
+              "name": "update_order_status",
+              "taskReferenceName": "update_status_startup_reject_ref",
+              "type": "SIMPLE",
+              "inputParameters": {
+                "orderId": "${workflow.input.orderId}",
+                "status":  "FAILED",
+                "reason":  "Rejected during startup human review"
+              }
+            },
+            {
+              "name": "terminate_startup_rejected",
+              "taskReferenceName": "terminate_startup_rejected_ref",
+              "type": "TERMINATE",
+              "inputParameters": {
+                "terminationStatus": "COMPLETED",
+                "workflowOutput": {
+                  "orderId": "${workflow.input.orderId}",
+                  "reason": "Rejected during startup human review"
+                }
+              }
+            }
+          ]
+        },
+        "defaultCase": []
+      },
+      {
         "name": "parallel_fulfillment",
         "taskReferenceName": "parallel_fulfillment_ref",
         "type": "FORK_JOIN",

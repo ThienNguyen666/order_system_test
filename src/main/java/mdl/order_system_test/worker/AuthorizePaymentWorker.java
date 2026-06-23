@@ -90,6 +90,8 @@ public class AuthorizePaymentWorker implements Worker {
         result.addOutputData("authCode", authCode);
         return result;
     }
+    //dont pass sensitive info like authcode thru the workflow
+
 
     private int toInt(Object value) {
         if (value instanceof Number number) {

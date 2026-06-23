@@ -34,6 +34,13 @@ export const orderApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ approved, reviewer: 'Demo Reviewer', reason }),
     }).then(handleResponse),
+
+  completeHumanTask: (orderId, taskReferenceName, approved, reason = '') =>
+    fetch(`${BASE}/orders/${orderId}/human-tasks/${taskReferenceName}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved, reviewer: 'Demo Reviewer', reason }),
+    }).then(handleResponse),
 }
 
 export const chaosApi = {
