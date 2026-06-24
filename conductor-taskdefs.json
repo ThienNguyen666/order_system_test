@@ -77,6 +77,17 @@
     "timeoutPolicy": "TIME_OUT_WF"
   },
   {
+    "name": "payment_recovery_approval",
+    "description": "Human recovery gate after payment retries are exhausted.",
+    "ownerEmail": "dev@example.com",
+    "retryCount": 0,
+    "retryLogic": "FIXED",
+    "retryDelaySeconds": 0,
+    "timeoutSeconds": 300,
+    "responseTimeoutSeconds": 300,
+    "timeoutPolicy": "TIME_OUT_WF"
+  },
+  {
     "name": "release_inventory",
     "description": "Compensation task that releases inventory.",
     "ownerEmail": "dev@example.com",

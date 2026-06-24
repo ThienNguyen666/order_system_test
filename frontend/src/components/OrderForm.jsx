@@ -44,6 +44,18 @@ const RETRY_APPROVAL_PRESET = () => ({
   ],
 })
 
+const PAYMENT_RECOVERY_PRESET = () => ({
+  orderId: `ORD-RECOVER-${uid()}`,
+  customerId: 'CUST-88',
+  amount: '799.99',
+  demoPaymentFailures: 3,
+  simulatePaymentTimeout: false,
+  requireApproval: false,
+  items: [
+    { productId: 'PROD-REC-001', productName: 'Server Appliance', quantity: 1, unitPrice: '799.99' },
+  ],
+})
+
 const EMPTY_FORM = () => ({
   orderId: '',
   customerId: '',
@@ -128,6 +140,13 @@ export default function OrderForm({ onOrderCreated }) {
           }}>
           Retry + Approval
         </button>
+        <button type="button" onClick={() => setForm(PAYMENT_RECOVERY_PRESET())}
+          style={{
+            fontSize: 12, padding: '4px 14px', borderRadius: 6, cursor: 'pointer', fontWeight: 600,
+            background: '#3b0764', border: '1px solid #9333ea', color: '#d8b4fe',
+          }}>
+          Payment Recovery
+        </button>
         <span style={{ fontSize: 11, color: '#475569' }}>IDs are unique per click</span>
       </div>
 
@@ -157,6 +176,7 @@ export default function OrderForm({ onOrderCreated }) {
             <option value={0}>No forced failures</option>
             <option value={1}>Fail once, succeed on 2nd attempt</option>
             <option value={2}>Fail twice, succeed on 3rd attempt</option>
+            <option value={3}>Fail 3 times, ask human to recover</option>
           </select>
         </div>
         <label style={checkboxLabelStyle}>

@@ -112,9 +112,11 @@ The frontend has three quick-fill presets:
 - **Valid Order** — a normal $299.99 order that follows the success path all the way to shipment.
 - **High-Value (Fraud / Chaos)** — a $15,000 order that trips the fraud-risk check; combined with Chaos Mode it routes to the compensation branch.
 - **Retry + Approval** — sets `demoPaymentFailures` so payment authorization fails twice before succeeding (exercising the retry/backoff policy), and sets `requireApproval` so a manual approval task is created before shipment.
+- **Payment Recovery** — sets `demoPaymentFailures` to 3, exhausting automatic payment retries and routing to a human recovery task before either retrying payment once or compensating.
 
 Other controls on the order form:
 - **Demo payment failures** — force N payment authorization failures before it succeeds, to exercise `authorize_payment`'s retry policy.
+- **Fail 3 times, ask human to recover** — after two automatic retries, the third forced payment failure completes as recoverable business output and routes to `payment_recovery_ref`.
 - **Simulate payment timeout** — force a timeout to exercise the task's `timeoutPolicy`.
 - **Require approval** — gates shipment behind a manual `HUMAN` task (`manual_approval_ref`).
 - **Chaos Mode** toggle (top of page) — globally perturbs worker behavior to make failure/compensation paths easier to trigger on demand.
@@ -184,7 +186,9 @@ every 250 ms:
 
 This is all standard Netflix Conductor REST API — no proprietary client needed.
 
-`HUMAN` tasks (intake/risk/compliance/manual approval) are not polled by a worker; they stay `SCHEDULED`/`IN_PROGRESS` until a reviewer completes them via the API, at which point Conductor advances the workflow.
+`HUMAN` tasks (intake/risk/compliance/payment recovery/manual approval) are not polled by a worker; they stay `SCHEDULED`/`IN_PROGRESS` until a reviewer completes them via the API, at which point Conductor advances the workflow.
+
+Payment recovery is modeled as business recovery, not an operator-only retry. `AuthorizePaymentWorker` lets the first two forced failures use Conductor's normal retry behavior. On the third forced failure it completes the task with `paymentAuthorized=false` and `paymentRecoverable=true`, so `saga_decision_ref` routes to `payment_recovery_ref`. If the reviewer approves, the workflow schedules a fresh `authorize_payment_recovery_ref` task and then continues to shipment. If the reviewer rejects, the workflow releases inventory and marks the order `COMPENSATED`.
 
 Rejection is handled by workflow routing, not by `UpdateOrderStatusWorker` deciding anything. For example, a rejected `manual_approval_ref` makes `approval_decision_ref` choose its `rejected` branch. That branch runs compensation tasks and then schedules `update_order_status` with:
 

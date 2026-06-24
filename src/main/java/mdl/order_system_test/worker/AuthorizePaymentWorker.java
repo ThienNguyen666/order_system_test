@@ -52,13 +52,23 @@ public class AuthorizePaymentWorker implements Worker {
                             + responseTimeoutSeconds);
         }
 
-        if (attempt <= demoPaymentFailures) {
+        if (attempt <= demoPaymentFailures && attempt <= 2) {
             TaskResult failed = new TaskResult(task);
             failed.setStatus(TaskResult.Status.FAILED);
             failed.setReasonForIncompletion(
                     "Demo payment gateway failure on attempt " + attempt + " of " + (demoPaymentFailures + 1));
             failed.log("Demo retry failure: attempt " + attempt + " will be retried by Conductor");
             return failed;
+        }
+
+        if (attempt <= demoPaymentFailures) {
+            attemptsByOrderId.remove(orderId);
+            TaskResult recoverable = new TaskResult(task);
+            recoverable.setStatus(TaskResult.Status.COMPLETED);
+            recoverable.addOutputData("paymentAuthorized", false);
+            recoverable.addOutputData("paymentRecoverable", true);
+            recoverable.addOutputData("reason", "Payment failed after automatic retries");
+            return recoverable;
         }
 
         // ── Chaos Mode ───────────────────────────────────────────────────────
