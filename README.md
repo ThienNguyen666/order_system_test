@@ -63,10 +63,19 @@ Three human reviewers (intake, risk, compliance) must approve before the order i
 
 ## Running locally
 
-**Prerequisites:** Docker Desktop, ports 3000 / 8080 / 8085 / 6379 / 27017 free.
+**Prerequisites:** Docker Desktop, ports 3000 / 8080 / 8081 / 1234 / 6379 / 27017 free.
+
+Start the standalone OSS Conductor server first:
 
 ```bash
-# 1. Start everything
+docker run --init -p 8081:8080 -p 1234:5000 \
+  --mount source=redis,target=/redis \
+  --mount source=postgres,target=/pgdata \
+  orkesio/orkes-conductor-community-standalone:latest
+```
+
+```bash
+# 1. Start the app services
 docker compose up --build
 
 # Wait ~90 s for Conductor to finish booting, then:
@@ -83,7 +92,8 @@ open http://localhost:3000
 On startup, the backend automatically registers the task and workflow definitions from
 `conductor-workflow.json` with Conductor (`ConductorMetadataService`) — no manual import step needed.
 
-The backend is at `http://localhost:8080`, Conductor UI at `http://localhost:8085`.
+The backend is at `http://localhost:8080`, Conductor API at `http://localhost:8081/api`,
+and Conductor UI at `http://localhost:1234`.
 
 ---
 
@@ -93,9 +103,12 @@ The backend is at `http://localhost:8080`, Conductor UI at `http://localhost:808
 |---|---|---|
 | `order-frontend` | 3000 | React UI |
 | `order-backend` | 8080 | Spring Boot API |
-| `order-conductor` | 8085 | Conductor workflow engine |
 | `order-mongodb` | 27017 | MongoDB |
 | `order-redis` | 6379 | Redis (human task queue cache) |
+
+The Conductor server itself is expected to be the standalone Docker container on host ports
+`8081` (API) and `1234` (UI). The backend reaches it from inside Docker through
+`CONDUCTOR_SERVER_URL=http://host.docker.internal:8081/api`.
 
 ---
 
@@ -116,7 +129,7 @@ Other controls on the order form:
 
 Every order also passes through three startup human-approval tasks (intake, risk, compliance) before any automated processing begins. Pending human tasks are listed per order in the UI and can be approved/rejected via `POST /api/orders/{orderId}/human-tasks/{taskReferenceName}/complete` (or `/approval` for the legacy manual-approval-only endpoint). Pending tasks are cached in Redis (`HumanTaskQueueService`) keyed by order, with a 6-hour TTL.
 
-After submitting, open the Conductor UI at `http://localhost:8085`, navigate to **Executions → Workflows**, and watch the saga execute in real time. You can see each task transition through `SCHEDULED → IN_PROGRESS → COMPLETED`. The frontend's **Workflow Diagram** view (`WorkflowDiagram.jsx`) also renders live task status per order.
+After submitting, open the Conductor UI at `http://localhost:1234`, navigate to **Executions → Workflows**, and watch the saga execute in real time. You can see each task transition through `SCHEDULED → IN_PROGRESS → COMPLETED`. The frontend's **Workflow Diagram** view (`WorkflowDiagram.jsx`) also renders live task status per order.
 
 ---
 
@@ -179,6 +192,15 @@ every 250 ms:
 This is all standard Netflix Conductor REST API — no proprietary client needed.
 
 `HUMAN` tasks (intake/risk/compliance/manual approval) are not polled by a worker; they stay `SCHEDULED`/`IN_PROGRESS` until a reviewer completes them via the API, at which point Conductor advances the workflow.
+
+Rejection is handled by workflow routing, not by `UpdateOrderStatusWorker` deciding anything. For example, a rejected `manual_approval_ref` makes `approval_decision_ref` choose its `rejected` branch. That branch runs compensation tasks and then schedules `update_order_status` with:
+
+```
+status = COMPENSATED
+reason = Rejected by manual approval
+```
+
+`UpdateOrderStatusWorker` simply reads those task inputs and persists them through `OrderService.updateStatus(...)`.
 
 ---
 
