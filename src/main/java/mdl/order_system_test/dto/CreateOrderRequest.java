@@ -28,8 +28,8 @@ public class CreateOrderRequest {
     @NotEmpty(message = "at least one item is required")
     private List<OrderItem> items;
 
-    @Min(value = 0, message = "demoPaymentFailures must be 0, 1, or 2")
-    @Max(value = 2, message = "demoPaymentFailures must be 0, 1, or 2")
+    @Min(value = 0, message = "demoPaymentFailures must be 0, 1, 2, or 3")
+    @Max(value = 3, message = "demoPaymentFailures must be 0, 1, 2, or 3")
     private Integer demoPaymentFailures = 0;
 
     private Boolean simulatePaymentTimeout = false;

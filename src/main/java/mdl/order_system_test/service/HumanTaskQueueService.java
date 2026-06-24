@@ -23,6 +23,7 @@ public class HumanTaskQueueService {
             "intake_approval_ref", "Intake Approval",
             "risk_approval_ref", "Risk Approval",
             "compliance_approval_ref", "Compliance Approval",
+            "payment_recovery_ref", "Payment Recovery",
             "manual_approval_ref", "Manual Approval"
     );
 

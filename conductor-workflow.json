@@ -172,9 +172,10 @@
         "taskReferenceName": "saga_decision_ref",
         "type": "SWITCH",
         "evaluatorType": "javascript",
-        "expression": "$.paymentStatus === true || $.paymentStatus === 'true' ? 'success' : 'compensation'",
+        "expression": "$.paymentStatus === true || $.paymentStatus === 'true' ? 'success' : (($.paymentRecoverable === true || $.paymentRecoverable === 'true') ? 'payment_recovery' : 'compensation')",
         "inputParameters": {
-          "paymentStatus": "${authorize_payment_ref.output.paymentAuthorized}"
+          "paymentStatus":      "${authorize_payment_ref.output.paymentAuthorized}",
+          "paymentRecoverable": "${authorize_payment_ref.output.paymentRecoverable}"
         },
         "decisionCases": {
           "success": [
@@ -297,6 +298,187 @@
                     "orderId": "${workflow.input.orderId}",
                     "status":  "FAILED",
                     "reason":  "Unexpected manual approval outcome"
+                  }
+                }
+              ]
+            }
+          ],
+          "payment_recovery": [
+            {
+              "name": "payment_recovery_approval",
+              "taskReferenceName": "payment_recovery_ref",
+              "type": "HUMAN",
+              "inputParameters": {
+                "orderId":    "${workflow.input.orderId}",
+                "customerId": "${workflow.input.customerId}",
+                "amount":     "${workflow.input.amount}",
+                "reason":     "${authorize_payment_ref.output.reason}",
+                "prompt":     "Payment failed after automatic retries. Approve one recovery payment attempt?"
+              }
+            },
+            {
+              "name": "payment_recovery_decision",
+              "taskReferenceName": "payment_recovery_decision_ref",
+              "type": "SWITCH",
+              "evaluatorType": "javascript",
+              "expression": "$.approved === true || $.approved === 'true' ? 'retry_payment' : 'compensation'",
+              "inputParameters": {
+                "approved": "${payment_recovery_ref.output.approved}"
+              },
+              "decisionCases": {
+                "retry_payment": [
+                  {
+                    "name": "authorize_payment",
+                    "taskReferenceName": "authorize_payment_recovery_ref",
+                    "type": "SIMPLE",
+                    "retryCount": 2,
+                    "retryLogic": "EXPONENTIAL_BACKOFF",
+                    "retryDelaySeconds": 3,
+                    "timeoutSeconds": 45,
+                    "timeoutPolicy": "RETRY",
+                    "inputParameters": {
+                      "orderId":    "${workflow.input.orderId}",
+                      "customerId": "${workflow.input.customerId}",
+                      "amount":     "${workflow.input.amount}",
+                      "demoPaymentFailures":    0,
+                      "simulatePaymentTimeout": false
+                    }
+                  },
+                  {
+                    "name": "recovery_payment_decision",
+                    "taskReferenceName": "recovery_payment_decision_ref",
+                    "type": "SWITCH",
+                    "evaluatorType": "javascript",
+                    "expression": "$.paymentStatus === true || $.paymentStatus === 'true' ? 'success' : 'compensation'",
+                    "inputParameters": {
+                      "paymentStatus": "${authorize_payment_recovery_ref.output.paymentAuthorized}"
+                    },
+                    "decisionCases": {
+                      "success": [
+                        {
+                          "name": "shipment_sub_workflow",
+                          "taskReferenceName": "shipment_recovery_ref",
+                          "type": "SUB_WORKFLOW",
+                          "inputParameters": {
+                            "orderId":    "${workflow.input.orderId}",
+                            "customerId": "${workflow.input.customerId}",
+                            "items":      "${workflow.input.items}"
+                          },
+                          "subWorkflowParam": {
+                            "name": "shipment_sub_workflow",
+                            "version": 1
+                          }
+                        },
+                        {
+                          "name": "update_order_status",
+                          "taskReferenceName": "update_status_recovery_success_ref",
+                          "type": "SIMPLE",
+                          "retryCount": 3,
+                          "retryLogic": "FIXED",
+                          "retryDelaySeconds": 1,
+                          "inputParameters": {
+                            "orderId":        "${workflow.input.orderId}",
+                            "status":         "COMPLETED",
+                            "trackingNumber": "${shipment_recovery_ref.output.trackingNumber}"
+                          }
+                        }
+                      ],
+                      "compensation": [
+                        {
+                          "name": "release_inventory",
+                          "taskReferenceName": "release_inventory_recovery_declined_ref",
+                          "type": "SIMPLE",
+                          "retryCount": 3,
+                          "retryLogic": "EXPONENTIAL_BACKOFF",
+                          "retryDelaySeconds": 2,
+                          "timeoutSeconds": 30,
+                          "timeoutPolicy": "RETRY",
+                          "inputParameters": {
+                            "orderId": "${workflow.input.orderId}",
+                            "items":   "${workflow.input.items}"
+                          }
+                        },
+                        {
+                          "name": "update_order_status",
+                          "taskReferenceName": "update_status_recovery_declined_ref",
+                          "type": "SIMPLE",
+                          "retryCount": 3,
+                          "retryLogic": "FIXED",
+                          "retryDelaySeconds": 1,
+                          "inputParameters": {
+                            "orderId": "${workflow.input.orderId}",
+                            "status":  "COMPENSATED",
+                            "reason":  "${authorize_payment_recovery_ref.output.reason}"
+                          }
+                        }
+                      ]
+                    },
+                    "defaultCase": [
+                      {
+                        "name": "update_order_status",
+                        "taskReferenceName": "update_status_recovery_payment_default_ref",
+                        "type": "SIMPLE",
+                        "inputParameters": {
+                          "orderId": "${workflow.input.orderId}",
+                          "status":  "FAILED",
+                          "reason":  "Unexpected recovery payment outcome"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "compensation": [
+                  {
+                    "name": "release_inventory",
+                    "taskReferenceName": "release_inventory_recovery_ref",
+                    "type": "SIMPLE",
+                    "retryCount": 3,
+                    "retryLogic": "EXPONENTIAL_BACKOFF",
+                    "retryDelaySeconds": 2,
+                    "timeoutSeconds": 30,
+                    "timeoutPolicy": "RETRY",
+                    "inputParameters": {
+                      "orderId": "${workflow.input.orderId}",
+                      "items":   "${workflow.input.items}"
+                    }
+                  },
+                  {
+                    "name": "void_payment_authorization",
+                    "taskReferenceName": "void_payment_recovery_ref",
+                    "type": "SIMPLE",
+                    "retryCount": 3,
+                    "retryLogic": "EXPONENTIAL_BACKOFF",
+                    "retryDelaySeconds": 2,
+                    "timeoutSeconds": 30,
+                    "timeoutPolicy": "RETRY",
+                    "inputParameters": {
+                      "orderId": "${workflow.input.orderId}"
+                    }
+                  },
+                  {
+                    "name": "update_order_status",
+                    "taskReferenceName": "update_status_recovery_comp_ref",
+                    "type": "SIMPLE",
+                    "retryCount": 3,
+                    "retryLogic": "FIXED",
+                    "retryDelaySeconds": 1,
+                    "inputParameters": {
+                      "orderId": "${workflow.input.orderId}",
+                      "status":  "COMPENSATED",
+                      "reason":  "Payment recovery rejected by human reviewer"
+                    }
+                  }
+                ]
+              },
+              "defaultCase": [
+                {
+                  "name": "update_order_status",
+                  "taskReferenceName": "update_status_recovery_default_ref",
+                  "type": "SIMPLE",
+                  "inputParameters": {
+                    "orderId": "${workflow.input.orderId}",
+                    "status":  "FAILED",
+                    "reason":  "Unexpected payment recovery decision"
                   }
                 }
               ]
