@@ -68,7 +68,7 @@ services:
       SPRING_DATA_MONGODB_URI: mongodb://admin:secret@mongodb:27017/order_db?authSource=admin
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
-      CONDUCTOR_SERVER_URL: http://conductor:8080/api
+      CONDUCTOR_SERVER_URL: http://host.docker.internal:8081/api
     depends_on:
       mongodb:
         condition: service_healthy
@@ -76,7 +76,8 @@ services:
         condition: service_healthy
     networks:
       - order-net
-
+    extra_hosts:
+        - "host.docker.internal:host-gateway"
   # ── 5. React Frontend ────────────────────────────────────────────────────────
   frontend:
     build:
